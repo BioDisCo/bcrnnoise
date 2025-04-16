@@ -1,5 +1,4 @@
 matplotlib
-mobspy
 numpy
 pint
 solve_ivp_pint ~= 1.0.0
