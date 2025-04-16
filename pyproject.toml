@@ -49,7 +49,7 @@ reportOptionalSubscript = true
 # reportUnknownVariableType = true
 reportUninitializedVariable = true
 reportUnusedVariable = true
-exclude = ["**/examples/*", "**/tests/*"]
+exclude = ["examples", "tests", "**/venv", "**/.venv", "**/env", "**/site-packages", "**/__pycache__", "**/.tox", "**/.mypy_cache"]
 
 [tool.ruff]
 line-length = 120
