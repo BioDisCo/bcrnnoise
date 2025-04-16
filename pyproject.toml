@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs", "hatch-requirements-txt"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bcrnnoise"
+dynamic = ["version", "dependencies"]
+requires-python = ">=3.11"
+authors = [
+  { name = "Arman Ferdowsi", email = "ferdowsi@ecs.tuwien.ac.at" },
+  { name = "Matthias Függer", email = "mfuegger@lmf.cnrs.fr" },
+  { name = "Thomas Nowak", email = "thomas@thomasnowak.net" },
+]
+maintainers = [
+  { name = "Arman Ferdowsi", email = "ferdowsi@ecs.tuwien.ac.at" },
+  { name = "Matthias Függer", email = "mfuegger@lmf.cnrs.fr" },
+  { name = "Thomas Nowak", email = "thomas@thomasnowak.net" },
+]
+readme = "README.md"
+license = { file = "LICENSE" }
+classifiers = [
+  "Programming Language :: Python",
+]
+
+[project.urls]
+Repository = "https://github.com/BioDisCo/bcrnnoise.git"
+
+[tool.hatch.metadata]
+core-metadata-version = "2.4"
+
+[tool.hatch.metadata.hooks.requirements_txt]
+files = ["requirements.txt"]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build]
+include = [
+    "bcrnnoise.py",
+]
+
+[tool.pyright]
+venvPath = "."
+venv = "venv"
+typeCheckingMode = "standard"
+reportGeneralTypeIssues = true
+reportOptionalSubscript = true
+# reportUnknownParameterType = true
+# reportUnknownVariableType = true
+reportUninitializedVariable = true
+reportUnusedVariable = true
+exclude = ["**/examples/*", "**/tests/*"]
+
+[tool.ruff]
+line-length = 120
+lint.select = ["ALL"]
+lint.ignore = ["COM812", "CPY001", "ERA001", "FIX", "ISC001", "TD002", "TD003"]
+lint.pydocstyle.convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"**/examples/*" = ["ANN", "ARG", "D", "INP001", "N", "T201"]
+"**/tests/**/*" = ["INP001", "PLC1901", "PLR2004", "PLR6301", "S", "TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 80
