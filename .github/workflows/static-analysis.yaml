@@ -19,9 +19,8 @@ jobs:
         with:
           args: "format --check"
       - run: |
-          python -m venv venv
-          . venv/bin/activate
+          python -m venv .venv
+          . .venv/bin/activate
           pip install -r requirements.txt
-          python --version
-      - run: echo "$PWD/venv/bin" >> $GITHUB_PATH
+      - run: echo "$PWD/.venv/bin" >> $GITHUB_PATH
       - uses: jakebailey/pyright-action@v2
