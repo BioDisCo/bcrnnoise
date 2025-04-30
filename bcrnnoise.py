@@ -6,7 +6,7 @@ Supports simulation via ODEs, Markov chains, and SDEs with Gaussian and custom n
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from typing import Any, NamedTuple, cast
+from typing import NamedTuple, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -274,13 +274,14 @@ class BCRN(ABC):
 
         return Timeseries(times=times, states=states)
 
+
 def plot_timeseries(
-        tss: list[Timeseries] | Timeseries,
-        labels: list[str],
-        ax: plt.Axes | None = None,
-        figsize: tuple[float, float]=(6, 4),
-        **plot_kwargs  # noqa: ANN003
- ) -> plt.Axes:
+    tss: list[Timeseries] | Timeseries,
+    labels: list[str],
+    ax: plt.Axes | None = None,
+    figsize: tuple[float, float] = (6, 4),
+    **plot_kwargs,  # noqa: ANN003
+) -> plt.Axes:
     """Plot a list of time series.
 
     Params:
@@ -294,16 +295,16 @@ def plot_timeseries(
     conc_unit = get_unit(init_state[0])
 
     if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
+        _, ax = plt.subplots(figsize=figsize)
 
     for i in range(len(init_state)):
         for k, ts in enumerate(tss_li):
             times = undimensionalize(ts.times, time_unit)
             vals = undimensionalize([s[i] for s in ts.states], conc_unit)
             ax.plot(times, vals, label=labels[k], **plot_kwargs)
-        # fig.xlabel(f"Time ({self.time_horizon.units})")
-        # plt.ylabel(f"concentration #{i} ({1 / self.volume.units})")  # TODO: useful names for concentrations
-        # plt.legend()
-        # plt.tight_layout()
+        plt.legend(frameon=False)
+        plt.xlabel(f"Time ({time_unit})")
+        plt.ylabel(f"Concentration ({conc_unit})")
+        plt.tight_layout()
 
     return ax

@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import NamedTuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 from pint import Quantity, UnitRegistry
 
@@ -101,18 +102,6 @@ class VanillaSystem(BCRN):
             return [self.params.x_m / (u ** (1.0 / self.params.pareto_alpha))]
         return [0.0 * self.params.init_mRNA]
 
-    # def plot_all(self) -> None:
-    #     """Simulate and plot all time series."""
-    #     self.plot_timeseries(
-    #         tss=[
-    #             self.simulate_ode(),
-    #             self.simulate_markov_chain(),
-    #             self.simulate_sde(noise_fun=self.gaussian_noise_fun),
-    #             self.simulate_sde(noise_fun=self.pareto_noise_fun),
-    #         ],
-    #         labels=["ODE", "Markov chain", "SDE Gaussian", "SDE Pareto"],
-    #     )
-
 
 def main() -> None:
     u = UnitRegistry()
@@ -121,7 +110,7 @@ def main() -> None:
     delta = 0.1 / u.minute
     init_mRNA = 0.0 / u.femtoliter
     volume = 1.0 * u.femtoliter
-    time_horizon = 2000.0 * u.minute
+    time_horizon = 200.0 * u.minute
     dt = 0.01 * u.minute
 
     sigma = 5.0 / u.femtoliter / u.minute**0.5
@@ -151,8 +140,9 @@ def main() -> None:
             sys.simulate_sde(noise_fun=sys.gaussian_noise_fun),
             sys.simulate_sde(noise_fun=sys.pareto_noise_fun),
         ],
-        labels=["ODE", "Markov chain", "SDE Gaussian", "SDE Pareto"]
+        labels=["ODE", "Markov chain", "SDE Gaussian", "SDE Pareto"],
     )
+    plt.show()
 
 
 if __name__ == "__main__":
