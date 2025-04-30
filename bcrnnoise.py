@@ -6,7 +6,7 @@ Supports simulation via ODEs, Markov chains, and SDEs with Gaussian and custom n
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -275,22 +275,36 @@ class BCRN(ABC):
 
         return Timeseries(times=times, states=states)
 
-    def plot_timeseries(self, tss: list[Timeseries], labels: list[str]) -> None:
-        """Plot a list of time series.
+def plot_timeseries(
+        tss: list[Timeseries] | Timeseries,
+        labels: list[str],
+        ax: plt.Axes | None = None,
+        figsize: tuple[float, float]=(6, 4),
+        **plot_kwargs  # noqa: ANN003
+ ) -> plt.Axes:
+    """Plot a list of time series.
 
-        Params:
-            tss: the time series to be plotted
-            labels: their respective labels
+    Params:
+        tss: the time series to be plotted
+        labels: their respective labels
 
-        """
-        for i in range(len(self.init_state)):
-            plt.figure(figsize=(6, 4))
-            for k, ts in enumerate(tss):
-                times = undimensionalize(ts.times, get_unit(self.time_horizon))
-                vals = undimensionalize([s[i] for s in ts.states], get_unit(1 / self.volume))
-                plt.plot(times, vals, label=labels[k])
-            plt.xlabel(f"Time ({self.time_horizon.units})")
-            plt.ylabel(f"concentration #{i} ({1 / self.volume.units})")  # TODO: useful names for concentrations
-            plt.legend()
-            plt.tight_layout()
-        plt.show()
+    """
+    tss_li: list[Timeseries] = [tss] if isinstance(tss, Timeseries) else tss
+    init_state = tss_li[0].states[0]
+    time_unit = get_unit(tss_li[0].times[0])
+    conc_unit = get_unit(init_state[0])
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+
+    for i in range(len(init_state)):
+        for k, ts in enumerate(tss_li):
+            times = undimensionalize(ts.times, time_unit)
+            vals = undimensionalize([s[i] for s in ts.states], conc_unit)
+            ax.plot(times, vals, label=labels[k], **plot_kwargs)
+        # fig.xlabel(f"Time ({self.time_horizon.units})")
+        # plt.ylabel(f"concentration #{i} ({1 / self.volume.units})")  # TODO: useful names for concentrations
+        # plt.legend()
+        # plt.tight_layout()
+
+    return ax

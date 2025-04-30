@@ -4,7 +4,7 @@ from typing import NamedTuple
 import numpy as np
 from pint import Quantity, UnitRegistry
 
-from bcrnnoise import BCRN
+from bcrnnoise import BCRN, plot_timeseries
 
 
 class VanillaParameters(NamedTuple):
@@ -116,17 +116,17 @@ class VanillaSystem(BCRN):
             return [self.params.x_m / (u ** (1.0 / self.params.pareto_alpha))]
         return [0.0 * self.params.init_mRNA]
 
-    def plot_all(self) -> None:
-        """Simulate and plot all time series."""
-        self.plot_timeseries(
-            tss=[
-                self.simulate_ode(),
-                self.simulate_markov_chain(),
-                self.simulate_sde(noise_fun=self.gaussian_noise_fun),
-                self.simulate_sde(noise_fun=self.pareto_noise_fun),
-            ],
-            labels=["ODE", "Markov chain", "SDE Gaussian", "SDE Pareto"],
-        )
+    # def plot_all(self) -> None:
+    #     """Simulate and plot all time series."""
+    #     self.plot_timeseries(
+    #         tss=[
+    #             self.simulate_ode(),
+    #             self.simulate_markov_chain(),
+    #             self.simulate_sde(noise_fun=self.gaussian_noise_fun),
+    #             self.simulate_sde(noise_fun=self.pareto_noise_fun),
+    #         ],
+    #         labels=["ODE", "Markov chain", "SDE Gaussian", "SDE Pareto"],
+    #     )
 
 
 def main() -> None:
@@ -158,7 +158,16 @@ def main() -> None:
         x_m=x_m,
     )
     sys = VanillaSystem(params)
-    sys.plot_all()
+
+    plot_timeseries(
+        tss=[
+            sys.simulate_ode(),
+            sys.simulate_markov_chain(),
+            sys.simulate_sde(noise_fun=sys.gaussian_noise_fun),
+            sys.simulate_sde(noise_fun=sys.pareto_noise_fun),
+        ],
+        labels=["ODE", "Markov chain", "SDE Gaussian", "SDE Pareto"]
+    )
 
 
 if __name__ == "__main__":
