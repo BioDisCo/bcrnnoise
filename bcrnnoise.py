@@ -278,10 +278,10 @@ class BCRN(ABC):
 def plot_timeseries(
     tss: list[Timeseries] | Timeseries,
     labels: list[str],
-    ax: plt.Axes | None = None,
+    ax: plt.Axes | None = None,  # type: ignore[reportPrivateImportUsage]
     figsize: tuple[float, float] = (6, 4),
     **plot_kwargs,  # noqa: ANN003
-) -> plt.Axes:
+) -> plt.Axes:  # type: ignore[reportPrivateImportUsage]
     """Plot a list of time series.
 
     Params:
