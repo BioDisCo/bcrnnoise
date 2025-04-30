@@ -266,7 +266,7 @@ class BCRN(ABC):
                 ],
             )
 
-            # Protein should remain nonnegative (if desired, we can clamp):
+            # Concentration should remain nonnegative (if desired, we can clamp):
             for i in range(len(self.init_state)):
                 if state_new[i].magnitude < 0:
                     state_new[i] *= 0.0
