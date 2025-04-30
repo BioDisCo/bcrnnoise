@@ -287,7 +287,12 @@ def plot_timeseries(
     Params:
         tss: the time series to be plotted
         labels: their respective labels
+        ax (optional): Axes object to plot on
+        figsize: size of the figure
+        **plot_kwargs: additional parameters for plotting
 
+    Returns:
+        The axis object of the plot.
     """
     tss_li: list[Timeseries] = [tss] if isinstance(tss, Timeseries) else tss
     init_state = tss_li[0].states[0]
