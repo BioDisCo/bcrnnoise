@@ -85,25 +85,24 @@ class Timeseries(NamedTuple):
 class BCRN(ABC):
     """Represents a BCRN system."""
 
-    @property
-    @abstractmethod
-    def time_horizon(self) -> Quantity:
-        """The time horizon of the system (dimension: time)."""
+    init_state: list[Quantity]
+    time_horizon: Quantity
+    volume: Quantity
+    dt: Quantity
 
-    @property
-    @abstractmethod
-    def init_state(self) -> list[Quantity]:
-        """The initial system state (dimension of each entry: 1 / volume)."""
+    def __init__(self, init_state: Sequence[Quantity], time_horizon: Quantity, volume: Quantity, dt: Quantity) -> None:
+        """Initialize an abstract BCRN system.
 
-    @property
-    @abstractmethod
-    def volume(self) -> Quantity:
-        """The total volume of the system (dimension: volume)."""
-
-    @property
-    @abstractmethod
-    def dt(self) -> Quantity:
-        """The time delta used for Euleur-Maruyama iteration (dimension: time)."""
+        Args:
+            init_state: The initial system state (dimension of each entry: 1 / volume).
+            time_horizon: The time horizon of the system (dimension: time).
+            volume: The total volume of the system (dimension: volume).
+            dt: The time delta used for Euler-Maruyama iteration (dimension: time).
+        """
+        self.init_state = list(init_state)
+        self.time_horizon = time_horizon
+        self.volume = volume
+        self.dt = dt
 
     @property
     @abstractmethod

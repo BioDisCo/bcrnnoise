@@ -63,26 +63,11 @@ class VanillaSystem(BCRN):
 
     def __init__(self, params: VanillaParameters) -> None:
         """Initialize the system."""
+        super().__init__(
+            init_state=[params.init_mRNA], time_horizon=params.time_horizon, volume=params.volume, dt=params.dt
+        )
+
         self.params = params
-
-    @property
-    def time_horizon(self) -> Quantity:
-        return self.params.time_horizon
-
-    @property
-    def volume(self) -> Quantity:
-        """The total volume of the system (dimension: volume)."""
-        return self.params.volume
-
-    @property
-    def init_state(self) -> list[Quantity]:
-        """The initial system state (dimension of each entry: 1 / volume)."""
-        return [self.params.init_mRNA]
-
-    @property
-    def dt(self) -> Quantity:
-        """The time delta used for Euleur-Maruyama iteration (dimension: time)."""
-        return self.params.dt
 
     @property
     def stoichiometry(self) -> np.ndarray:
