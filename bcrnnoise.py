@@ -302,14 +302,16 @@ def plot_timeseries(
     if ax is None:
         _, ax = plt.subplots(figsize=figsize)
 
-    for i in range(len(init_state)):
-        for k, ts in enumerate(tss_li):
+    for k, ts in enumerate(tss_li):
+        first_state = ts.states[0]
+        for i in range(len(first_state)):
             times = undimensionalize(ts.times, time_unit)
             vals = undimensionalize([s[i] for s in ts.states], conc_unit)
             ax.plot(times, vals, label=labels[k], **plot_kwargs)
-        plt.legend(frameon=False)
-        plt.xlabel(f"Time ({time_unit})")
-        plt.ylabel(f"Concentration ({conc_unit})")
-        plt.tight_layout()
+
+    plt.legend(frameon=False)
+    plt.xlabel(f"Time ({time_unit})")
+    plt.ylabel(f"Concentration ({conc_unit})")
+    plt.tight_layout()
 
     return ax
