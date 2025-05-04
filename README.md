@@ -7,4 +7,4 @@ Supports simulation via ODEs, Markov chains, and SDEs with Gaussian and custom n
 
 Up on [PyPI](https://pypi.org/project/bcrnnoise/) and installable via `pip install bcrnnoise`.
 
-Check out [`example_vanilla.py`](https://github.com/BioDisCo/bcrnnoise/blob/main/examples/example_vanilla.py) for an example.
+Check out [`example_vanilla.py`](https://github.com/BioDisCo/bcrnnoise/blob/main/examples/example_rna.py) for an example.
