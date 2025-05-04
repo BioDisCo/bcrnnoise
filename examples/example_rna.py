@@ -22,8 +22,9 @@ from typing import NamedTuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-from bcrnnoise import BCRN, Timeseries, plot_timeseries
 from pint import Quantity, UnitRegistry
+
+from bcrnnoise import BCRN, Timeseries, plot_timeseries
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -48,7 +49,7 @@ class TranscriptionParameters(NamedTuple):
     on_to_off: Quantity
     off_to_on: Quantity
 
-    init_mRNA: Quantity  # noqa: N815
+    init_mRNA: Quantity
     volume: Quantity
     time_horizon: Quantity
     dt: Quantity
@@ -313,7 +314,7 @@ class GaussianNoiseSystem(TranscriptionBCRN):
         return [self.params.alpha, self.params.delta * state[0]]
 
     def noise(self, rng: np.random.Generator, t, y):
-        dW = np.sqrt(self.params.dt) * rng.normal()  # noqa: N806
+        dW = np.sqrt(self.params.dt) * rng.normal()
         return [self.params.sigma * dW]
 
     def simulate(self, seed: int = 42) -> Timeseries:
@@ -344,7 +345,7 @@ def plot_dynamics(systems: dict[str, TranscriptionBCRN], fname: str = "dynamics.
     tss = [only_rna(sys.simulate()) for sys in systems.values()]
     plot_timeseries(tss=tss, labels=list(systems.keys()), figsize=(6, height), drawstyle="steps-post", lw=1.0)
     plt.savefig(fname)
-    logger.info(f"wrote {fname}")
+    logger.info("wrote %s", fname)
 
 
 def plot_histogram(
@@ -383,13 +384,13 @@ def plot_histogram(
     plt.tight_layout()
     plt.tight_layout()
     plt.savefig(fname)
-    logger.info(f"wrote {fname}")
+    logger.info("wrote %s", fname)
 
 
 def example_onestate():
     u = UnitRegistry()
 
-    init_mRNA = 0.0 / u.femtoliter  # noqa: N806
+    init_mRNA = 0.0 / u.femtoliter
     volume = 1.0 * u.femtoliter
     time_horizon = 60.0 * u.minute
     dt = 0.1 * u.minute
@@ -443,7 +444,7 @@ def example_onestate():
 def example_twostate():
     u = UnitRegistry()
 
-    init_mRNA = 0.0 / u.femtoliter  # noqa: N806
+    init_mRNA = 0.0 / u.femtoliter
     volume = 1.0 * u.femtoliter
     time_horizon = 60.0 * u.minute
     dt = 0.1 * u.minute
