@@ -132,9 +132,9 @@ class BCRN(ABC):
             the time derivative of the state (dimension of each entry: 1 / volume / time)
 
         """
-        stoichiometry_matrix = np.matrix(self.stoichiometry).T
-        rates_matrix = np.matrix(self.reaction_rates(y), dtype=Quantity).T
-        return cast("list[Quantity]", (stoichiometry_matrix * rates_matrix).tolist()[0])
+        stoichiometry_matrix = np.array(self.stoichiometry).T
+        rates_array = np.array(self.reaction_rates(y), dtype=Quantity)
+        return cast("list[Quantity]", (stoichiometry_matrix @ rates_array).tolist())
 
     def simulate_ode(self) -> Timeseries:
         """Simulate the ODE kinetics of the BCRN.
