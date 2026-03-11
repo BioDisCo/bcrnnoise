@@ -257,11 +257,12 @@ class BCRN(ABC):
         for k in range(n_steps):
             # Deterministic drift:
             drift: list[Quantity] = self.ivp_rhs(t=times[k], y=states[k])
-            # Gaussian noise increment ~ N(0, sigma*sqrt(dt))
+            # Noise increment: call once per step so all species share the same draw
+            noise_increment: list[Quantity] = noise_fun(rng, times[k], states[k])
             state_new: list[Quantity] = cast(
                 "list[Quantity]",
                 [
-                    states[k][i] + drift[i] * self.dt + noise_fun(rng, times[k], states[k])[i]
+                    states[k][i] + drift[i] * self.dt + noise_increment[i]
                     for i in range(len(self.init_state))
                 ],
             )
