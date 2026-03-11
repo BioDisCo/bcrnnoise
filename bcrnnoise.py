@@ -261,10 +261,7 @@ class BCRN(ABC):
             noise_increment: list[Quantity] = noise_fun(rng, times[k], states[k])
             state_new: list[Quantity] = cast(
                 "list[Quantity]",
-                [
-                    states[k][i] + drift[i] * self.dt + noise_increment[i]
-                    for i in range(len(self.init_state))
-                ],
+                [states[k][i] + drift[i] * self.dt + noise_increment[i] for i in range(len(self.init_state))],
             )
 
             # Concentration should remain nonnegative (if desired, we can clamp):
