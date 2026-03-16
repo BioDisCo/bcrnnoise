@@ -37,6 +37,7 @@ source = "vcs"
 [tool.hatch.build]
 include = [
     "bcrnnoise.py",
+    "py.typed",
 ]
 
 [tool.pyright]
@@ -59,7 +60,7 @@ lint.pydocstyle.convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "**/examples/*" = ["ANN", "ARG", "D", "INP001", "N", "T201"]
-"**/tests/**/*" = ["INP001", "PLC1901", "PLR2004", "PLR6301", "S", "TID252"]
+"**/tests/**/*" = ["ANN", "D", "INP001", "PLC1901", "PLR2004", "PLR6301", "S", "TID252"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -67,6 +68,10 @@ ban-relative-imports = "all"
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
 mark-parentheses = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
 
 [tool.ruff.format]
 docstring-code-format = true
