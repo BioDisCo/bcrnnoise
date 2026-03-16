@@ -6,7 +6,7 @@ Supports simulation via ODEs, Markov chains, and SDEs with Gaussian and custom n
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from typing import NamedTuple, cast
+from typing import NamedTuple, TypeAlias, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -82,6 +82,40 @@ class Timeseries(NamedTuple):
     states: list[list[Quantity]]
 
 
+class BatchTimeseries(NamedTuple):
+    """Batched SDE time series for N simultaneously simulated BCRN trajectories.
+
+    Attributes:
+        times: shared time axis (dimension: time), length n_steps + 1.
+        states: states[step][species] is a Quantity whose magnitude has shape (n,),
+            holding one value per trajectory.
+        n: number of trajectories.
+
+    """
+
+    times: list[Quantity]
+    states: list[list[Quantity]]
+    n: int
+
+    def trajectory(self, j: int) -> "Timeseries":
+        """Extract the j-th trajectory as a Timeseries.
+
+        Args:
+            j: trajectory index in range [0, n).
+
+        Returns:
+            Timeseries with scalar Quantities for each species at each time step.
+
+        """
+        return Timeseries(
+            times=self.times,
+            states=[[species_state[j] for species_state in step] for step in self.states],
+        )
+
+
+BatchNoiseFun: TypeAlias = Callable[[np.random.Generator, Quantity, list[Quantity]], list[Quantity]]
+
+
 class BCRN(ABC):
     """Represents a BCRN system."""
 
@@ -132,8 +166,11 @@ class BCRN(ABC):
             the time derivative of the state (dimension of each entry: 1 / volume / time)
 
         """
-        stoichiometry_matrix = np.array(self.stoichiometry).T
-        rates_array = np.array(self.reaction_rates(y), dtype=Quantity)
+        stoichiometry_matrix = np.array(self.stoichiometry).T  # (n_species, n_reactions)
+        rates = self.reaction_rates(y)
+        rates_array = np.empty(len(rates), dtype=object)
+        for k, rate in enumerate(rates):
+            rates_array[k] = rate
         return cast("list[Quantity]", (stoichiometry_matrix @ rates_array).tolist())
 
     def simulate_ode(self) -> Timeseries:
@@ -271,6 +308,57 @@ class BCRN(ABC):
             states[k + 1] = state_new
 
         return Timeseries(times=times, states=states)
+
+    def simulate_sde_batch(
+        self,
+        noise_fun: BatchNoiseFun,
+        n: int,
+        seed: int = 42,
+    ) -> BatchTimeseries:
+        """Simulate n SDE trajectories simultaneously via Euler-Maruyama.
+
+        Runs n trajectories in a single vectorised loop by storing each species
+        state as a Quantity whose magnitude has shape (n,). reaction_rates is
+        called once per time step rather than n times, giving an O(n) speedup
+        over calling simulate_sde repeatedly. reaction_rates must use only
+        numpy-compatible arithmetic (no math.* or Python-level conditionals on
+        state values).
+
+        Args:
+            noise_fun: called once per step; receives rng, the current time, and
+                the batch state as a list of Quantities with magnitude shape (n,).
+                Must return noise increments in the same format.
+            n: number of trajectories to simulate simultaneously.
+            seed: seed for the random number generator.
+
+        Returns:
+            BatchTimeseries with a shared time axis; states[step][species] is a
+            Quantity of shape (n,).
+
+        """
+        n_steps = int(np.floor(self.time_horizon / self.dt))
+        times = [self.time_horizon * k / n_steps for k in range(n_steps + 1)]
+
+        states_batch: list[Quantity] = [s * np.ones(n) for s in self.init_state]
+        all_states: list[list[Quantity]] = [states_batch]
+
+        rng = np.random.default_rng(seed=seed)
+
+        for k in range(n_steps):
+            drift: list[Quantity] = self.ivp_rhs(t=times[k], y=states_batch)
+            noise_increment: list[Quantity] = noise_fun(rng, times[k], states_batch)
+            state_new: list[Quantity] = cast(
+                "list[Quantity]",
+                [states_batch[i] + drift[i] * self.dt + noise_increment[i] for i in range(len(self.init_state))],
+            )
+            for i in range(len(self.init_state)):
+                state_new[i] = state_new[i]._REGISTRY.Quantity(  # noqa: SLF001
+                    np.maximum(state_new[i].magnitude, 0.0), state_new[i].units
+                )
+            states_batch = state_new
+            all_states.append(states_batch)
+
+        return BatchTimeseries(times=times, states=all_states, n=n)
 
 
 def plot_timeseries(
