@@ -112,6 +112,23 @@ class BatchTimeseries(NamedTuple):
             states=[[species_state[j] for species_state in step] for step in self.states],
         )
 
+    def to_timeseries_list(self) -> "list[Timeseries]":
+        """Unpack all n trajectories into a list of Timeseries in a single pass.
+
+        More efficient than calling trajectory(j) in a loop, as it iterates
+        over the states once rather than n times.
+
+        Returns:
+            List of n Timeseries, one per trajectory, sharing the time axis.
+
+        """
+        n_steps = len(self.states)
+        per_traj: list[list[list[Quantity]]] = [[[] for _ in range(n_steps)] for _ in range(self.n)]
+        for k, step in enumerate(self.states):
+            for j in range(self.n):
+                per_traj[j][k] = [species_state[j] for species_state in step]
+        return [Timeseries(times=self.times, states=per_traj[j]) for j in range(self.n)]
+
 
 BatchNoiseFun: TypeAlias = Callable[[np.random.Generator, Quantity, list[Quantity]], list[Quantity]]
 
@@ -143,6 +160,15 @@ class BCRN(ABC):
     def stoichiometry(self) -> np.ndarray:
         """The stoichiometry matrix of the system."""
 
+    @property
+    def _stoichiometry_t(self) -> np.ndarray:
+        """Cached transpose of the stoichiometry matrix for use in ivp_rhs."""
+        try:
+            return self.__stoichiometry_t  # type: ignore[attr-defined]
+        except AttributeError:
+            self.__stoichiometry_t: np.ndarray = np.array(self.stoichiometry).T
+            return self.__stoichiometry_t
+
     @abstractmethod
     def reaction_rates(self, state: Sequence[Quantity]) -> list[Quantity]:
         """Calculate the rates of each reaction for a given system state.
@@ -166,12 +192,11 @@ class BCRN(ABC):
             the time derivative of the state (dimension of each entry: 1 / volume / time)
 
         """
-        stoichiometry_matrix = np.array(self.stoichiometry).T  # (n_species, n_reactions)
         rates = self.reaction_rates(y)
         rates_array = np.empty(len(rates), dtype=object)
         for k, rate in enumerate(rates):
             rates_array[k] = rate
-        return cast("list[Quantity]", (stoichiometry_matrix @ rates_array).tolist())
+        return cast("list[Quantity]", (self._stoichiometry_t @ rates_array).tolist())
 
     def simulate_ode(self) -> Timeseries:
         """Simulate the ODE kinetics of the BCRN.
@@ -286,23 +311,25 @@ class BCRN(ABC):
         """
         n_steps = int(np.floor(self.time_horizon / self.dt))
         times = [self.time_horizon * k / n_steps for k in range(n_steps + 1)]
-        states: list[list[Quantity]] = [self.init_state] * (n_steps + 1)
+        n_species = len(self.init_state)
+        states: list[list[Quantity]] = [cast("list[Quantity]", None)] * (n_steps + 1)
         states[0] = self.init_state
 
         rng = np.random.default_rng(seed=seed)
 
         for k in range(n_steps):
+            t = times[k]
             # Deterministic drift:
-            drift: list[Quantity] = self.ivp_rhs(t=times[k], y=states[k])
+            drift: list[Quantity] = self.ivp_rhs(t=t, y=states[k])
             # Noise increment: call once per step so all species share the same draw
-            noise_increment: list[Quantity] = noise_fun(rng, times[k], states[k])
+            noise_increment: list[Quantity] = noise_fun(rng, t, states[k])
             state_new: list[Quantity] = cast(
                 "list[Quantity]",
-                [states[k][i] + drift[i] * self.dt + noise_increment[i] for i in range(len(self.init_state))],
+                [states[k][i] + drift[i] * self.dt + noise_increment[i] for i in range(n_species)],
             )
 
             # Concentration should remain nonnegative (if desired, we can clamp):
-            for i in range(len(self.init_state)):
+            for i in range(n_species):
                 if state_new[i].magnitude < 0:
                     state_new[i] *= 0.0
             states[k + 1] = state_new
@@ -338,25 +365,33 @@ class BCRN(ABC):
         """
         n_steps = int(np.floor(self.time_horizon / self.dt))
         times = [self.time_horizon * k / n_steps for k in range(n_steps + 1)]
+        n_species = len(self.init_state)
+        n_reactions = self._stoichiometry_t.shape[1]
+        rates_buf = np.empty(n_reactions, dtype=object)
 
         states_batch: list[Quantity] = [s * np.ones(n) for s in self.init_state]
-        all_states: list[list[Quantity]] = [states_batch]
+        all_states: list[list[Quantity]] = [cast("list[Quantity]", None)] * (n_steps + 1)
+        all_states[0] = states_batch
 
         rng = np.random.default_rng(seed=seed)
 
         for k in range(n_steps):
-            drift: list[Quantity] = self.ivp_rhs(t=times[k], y=states_batch)
-            noise_increment: list[Quantity] = noise_fun(rng, times[k], states_batch)
+            t = times[k]
+            rates = self.reaction_rates(states_batch)
+            for r, rate in enumerate(rates):
+                rates_buf[r] = rate
+            drift: list[Quantity] = cast("list[Quantity]", (self._stoichiometry_t @ rates_buf).tolist())
+            noise_increment: list[Quantity] = noise_fun(rng, t, states_batch)
             state_new: list[Quantity] = cast(
                 "list[Quantity]",
-                [states_batch[i] + drift[i] * self.dt + noise_increment[i] for i in range(len(self.init_state))],
+                [states_batch[i] + drift[i] * self.dt + noise_increment[i] for i in range(n_species)],
             )
-            for i in range(len(self.init_state)):
-                state_new[i] = state_new[i]._REGISTRY.Quantity(  # noqa: SLF001
+            for i in range(n_species):
+                state_new[i] = state_new[i]._REGISTRY.Quantity(  # noqa: SLF001  # type: ignore[assignment]
                     np.maximum(state_new[i].magnitude, 0.0), state_new[i].units
                 )
             states_batch = state_new
-            all_states.append(states_batch)
+            all_states[k + 1] = states_batch
 
         return BatchTimeseries(times=times, states=all_states, n=n)
 
