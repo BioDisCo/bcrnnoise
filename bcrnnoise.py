@@ -4,6 +4,7 @@ Supports simulation via ODEs, Markov chains, and SDEs with Gaussian and custom n
 
 """
 
+import math
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from typing import NamedTuple, TypeAlias, cast
@@ -232,13 +233,14 @@ class BCRN(ABC):
                 (dimension of each entry: dimensionless)
 
         """
-        # Convert the initial state to quantities with units
-        count_state = initial_count_state
+        stoich = np.array(self.stoichiometry)  # (n_reactions, n_species), cached per call
+        count_arr = np.array(initial_count_state, dtype=float)
+
         time = cast("Quantity", 0.0 * max_time)
-        history = [(time, count_state)]
+        history: list[tuple[Quantity, Sequence[int]]] = [(time, count_arr.copy())]  # type: ignore[list-item]
 
         while time < max_time:
-            concentration_state = [val / self.volume for val in count_state]
+            concentration_state = [float(val) / self.volume for val in count_arr]
             rates = [rate * self.volume for rate in self.reaction_rates(concentration_state)]
             total_rate = sum(rates)
 
@@ -248,22 +250,17 @@ class BCRN(ABC):
             if total_rate.magnitude == 0:
                 break
 
-            # Draw two random numbers
             r1, r2 = rng.random(2)
 
-            # Time increment
-            tau = (1 / total_rate) * np.log(1 / r1)
+            tau = cast("Quantity", math.log(1.0 / r1) / total_rate)
             time += tau
 
-            # Which reaction occurs
-            reaction_probabilities = [rate / total_rate for rate in rates]
-            cumulative_probabilities = np.cumsum(reaction_probabilities)
-            reaction_idx = np.searchsorted(cumulative_probabilities, r2)
+            # Reaction selection via numpy to avoid per-rate pint arithmetic
+            rate_mags = np.fromiter((r.magnitude for r in rates), dtype=float, count=len(rates))
+            reaction_idx = int(np.searchsorted(np.cumsum(rate_mags), r2 * total_rate.magnitude))
 
-            # Update the state according to the selected reaction
-            count_state = [s + (self.stoichiometry[reaction_idx][i]) for i, s in enumerate(count_state)]
-
-            history.append((time, count_state))
+            count_arr += stoich[reaction_idx]
+            history.append((cast("Quantity", time), count_arr.copy()))  # type: ignore[list-item]
 
         return history
 
