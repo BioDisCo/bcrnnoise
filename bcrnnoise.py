@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pint import Quantity, Unit
 from solve_ivp_pint import solve_ivp
+from unit_jit import unit_jit
 
 
 def dimensionalize(seq: Sequence[float], unit: Unit) -> list[Quantity]:
@@ -215,6 +216,7 @@ class BCRN(ABC):
         return Timeseries(times=sol.t, states=time_series_of_lists)
 
     # Gillespie's algorithm with units
+    @unit_jit
     def gillespie(
         self, rng: np.random.Generator, initial_count_state: Sequence[int], max_time: Quantity
     ) -> list[tuple[Quantity, Sequence[int]]]:
@@ -242,10 +244,10 @@ class BCRN(ABC):
         while time < max_time:
             concentration_state = [float(val) / self.volume for val in count_arr]
             rates = [rate * self.volume for rate in self.reaction_rates(concentration_state)]
-            total_rate = sum(rates)
+            if not rates:
+                break
 
-            if not isinstance(total_rate, Quantity):  # if rates is empty
-                total_rate = 0.0 / self.volume / self.time_horizon
+            total_rate = sum(rates)
 
             if total_rate.magnitude == 0:
                 break

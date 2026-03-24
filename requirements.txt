@@ -2,3 +2,4 @@ matplotlib
 numpy
 pint
 solve_ivp_pint ~= 1.0.0
+unit-jit
