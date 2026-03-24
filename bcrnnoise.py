@@ -247,7 +247,7 @@ class BCRN(ABC):
             if not rates:
                 break
 
-            total_rate = sum(rates)
+            total_rate = cast("Quantity", sum(rates))
 
             if total_rate.magnitude == 0:
                 break
