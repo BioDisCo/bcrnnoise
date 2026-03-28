@@ -365,8 +365,6 @@ class BCRN(ABC):
         n_steps = int(np.floor(self.time_horizon / self.dt))
         times = [self.time_horizon * k / n_steps for k in range(n_steps + 1)]
         n_species = len(self.init_state)
-        n_reactions = self._stoichiometry_t.shape[1]
-        rates_buf = np.empty(n_reactions, dtype=object)
 
         states_batch: list[Quantity] = [s * np.ones(n) for s in self.init_state]
         all_states: list[list[Quantity]] = [cast("list[Quantity]", None)] * (n_steps + 1)
@@ -377,18 +375,16 @@ class BCRN(ABC):
         for k in range(n_steps):
             t = times[k]
             rates = self.reaction_rates(states_batch)
-            for r, rate in enumerate(rates):
-                rates_buf[r] = rate
-            drift: list[Quantity] = cast("list[Quantity]", (self._stoichiometry_t @ rates_buf).tolist())
+            drift: list[Quantity] = cast(
+                "list[Quantity]", (self._stoichiometry_t @ np.array(rates, dtype=object)).tolist()
+            )
             noise_increment: list[Quantity] = noise_fun(rng, t, states_batch)
             state_new: list[Quantity] = cast(
                 "list[Quantity]",
                 [states_batch[i] + drift[i] * self.dt + noise_increment[i] for i in range(n_species)],
             )
             for i in range(n_species):
-                state_new[i] = state_new[i]._REGISTRY.Quantity(  # noqa: SLF001  # type: ignore[assignment]
-                    np.maximum(state_new[i].magnitude, 0.0), state_new[i].units
-                )
+                state_new[i] = state_new[i] * cast("Quantity", (state_new[i].magnitude >= 0.0).astype(float))
             states_batch = state_new
             all_states[k + 1] = states_batch
 
