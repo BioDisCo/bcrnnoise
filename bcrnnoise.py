@@ -4,6 +4,7 @@ Supports simulation via ODEs, Markov chains, and SDEs with Gaussian and custom n
 
 """
 
+import functools
 import math
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
@@ -13,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pint import Quantity, Unit
 from solve_ivp_pint import solve_ivp
+from unit_jit import compile as unit_jit_compile
 from unit_jit import unit_jit
 
 
@@ -131,6 +133,33 @@ class BatchTimeseries(NamedTuple):
                 per_traj[j][k] = [species_state[j] for species_state in step]
         return [Timeseries(times=self.times, states=per_traj[j]) for j in range(self.n)]
 
+    def to_float_array(self, species_idx: int = 0, to_unit: str | None = None) -> "tuple[np.ndarray, np.ndarray]":
+        """Return (times_min, values) as plain numpy float arrays without any Quantity overhead.
+
+        This is much faster than ``to_timeseries_list()`` when you only need raw
+        numbers (e.g. to build a histogram or compute a metric): it does
+        ``n_steps + 1`` numpy operations on shape-``(n,)`` arrays instead of
+        creating ``n x n_steps x n_species`` scalar Quantity objects.
+
+        Args:
+            species_idx: which species to extract (default 0, typically mRNA).
+            to_unit: target unit string (e.g. ``"1/femtoliter"``). If *None*,
+                the native unit of the stored Quantity is used without conversion.
+
+        Returns:
+            ``(times_min, values)`` where
+            * ``times_min`` has shape ``(n_steps + 1,)`` and contains the time
+              axis in **minutes** as plain floats,
+            * ``values`` has shape ``(n, n_steps + 1)`` with one row per trajectory.
+
+        """
+        times_min = np.array([t.to("minute").magnitude for t in self.times], dtype=float)
+        if to_unit is None:
+            mags = np.array([step[species_idx].magnitude for step in self.states], dtype=float)
+        else:
+            mags = np.array([step[species_idx].to(to_unit).magnitude for step in self.states], dtype=float)
+        return times_min, mags.T  # (n_steps+1,), (n, n_steps+1)
+
 
 BatchNoiseFun: TypeAlias = Callable[[np.random.Generator, Quantity, list[Quantity]], list[Quantity]]
 
@@ -142,6 +171,27 @@ class BCRN(ABC):
     time_horizon: Quantity
     volume: Quantity
     dt: Quantity
+
+    @classmethod
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        """Wrap concrete subclass ``__init__`` to call ``unit_jit.compile(self)`` at the end.
+
+        This ensures that all ``@unit_jit``-decorated methods on the concrete instance
+        (including abstract methods overridden by the user, e.g. ``reaction_rates``
+        and ``noise``) are pre-compiled after all instance attributes are initialised,
+        so the first real simulation call pays no lazy-inference overhead.
+        """
+        super().__init_subclass__(**kwargs)
+        # Only wrap classes that define their own __init__ and are concrete (non-abstract).
+        if "__init__" in cls.__dict__ and not getattr(cls, "__abstractmethods__", None):
+            orig_init = cls.__dict__["__init__"]
+
+            @functools.wraps(orig_init)
+            def _init_with_compile(self: "BCRN", *args: object, **kw: object) -> None:
+                orig_init(self, *args, **kw)  # type: ignore[misc]
+                unit_jit_compile(self)
+
+            cls.__init__ = _init_with_compile  # type: ignore[method-assign]
 
     def __init__(self, init_state: Sequence[Quantity], time_horizon: Quantity, volume: Quantity, dt: Quantity) -> None:
         """Initialize an abstract BCRN system.
@@ -291,23 +341,41 @@ class BCRN(ABC):
 
         return Timeseries(times=times, states=states)
 
+    def noise(
+        self,
+        rng: np.random.Generator,
+        _t: Quantity,
+        y: Sequence[Quantity],
+    ) -> list[Quantity]:
+        """Noise term for SDE simulation.  Override in subclasses that use simulate_sde."""
+        raise NotImplementedError
+
     def simulate_sde(
-        self, noise_fun: Callable[[np.random.Generator, Quantity, Sequence[Quantity]], list[Quantity]], seed: int = 42
+        self,
+        seed: int = 42,
+        noise_fun: Callable[[np.random.Generator, Quantity, Sequence[Quantity]], list[Quantity]] | None = None,
     ) -> Timeseries:
         """Simulate the SDE kintetics of the BCRN with a given noise term using Euler-Maruyama discretization.
 
         Args:
+            seed: the seed for the random number generator used for random choices
             noise_fun: the function calculating the noise term, takes
                 a np.random.Generator for its random choices,
                 the current time (dimension: time), and
                 the current state (dimension of each entry: 1 / volume), and
-                returns a noise term for each species (dimension: 1 / volume)
-            seed: the seed for the random number generator used for random choices
+                returns a noise term for each species (dimension: 1 / volume).
+                Defaults to ``self.noise`` when not provided.
 
         Returns:
             the simulated time series
 
         """
+        if noise_fun is None:
+            noise_fun = cast(
+                "Callable[[np.random.Generator, Quantity, Sequence[Quantity]], list[Quantity]]",
+                self.noise,
+            )
+        assert noise_fun is not None  # noqa: S101
         n_steps = int(np.floor(self.time_horizon / self.dt))
         times = [self.time_horizon * k / n_steps for k in range(n_steps + 1)]
         n_species = len(self.init_state)
@@ -337,9 +405,9 @@ class BCRN(ABC):
 
     def simulate_sde_batch(
         self,
-        noise_fun: BatchNoiseFun,
         n: int,
         seed: int = 42,
+        noise_fun: BatchNoiseFun | None = None,
     ) -> BatchTimeseries:
         """Simulate n SDE trajectories simultaneously via Euler-Maruyama.
 
@@ -351,17 +419,24 @@ class BCRN(ABC):
         state values).
 
         Args:
+            n: number of trajectories to simulate simultaneously.
+            seed: seed for the random number generator.
             noise_fun: called once per step; receives rng, the current time, and
                 the batch state as a list of Quantities with magnitude shape (n,).
                 Must return noise increments in the same format.
-            n: number of trajectories to simulate simultaneously.
-            seed: seed for the random number generator.
+                Defaults to ``self.noise`` when not provided.
 
         Returns:
             BatchTimeseries with a shared time axis; states[step][species] is a
             Quantity of shape (n,).
 
         """
+        if noise_fun is None:
+            noise_fun = cast(
+                "Callable[[np.random.Generator, Quantity, Sequence[Quantity]], list[Quantity]]",
+                self.noise,
+            )
+        assert noise_fun is not None  # noqa: S101
         n_steps = int(np.floor(self.time_horizon / self.dt))
         times = [self.time_horizon * k / n_steps for k in range(n_steps + 1)]
         n_species = len(self.init_state)
@@ -375,9 +450,16 @@ class BCRN(ABC):
         for k in range(n_steps):
             t = times[k]
             rates = self.reaction_rates(states_batch)
-            drift: list[Quantity] = cast(
-                "list[Quantity]", (self._stoichiometry_t @ np.array(rates, dtype=object)).tolist()
-            )
+            # Quantities with array-shaped magnitudes (batch) cause numpy to strip
+            # units when building a dtype=object array.  Extract magnitudes first,
+            # do the matmul in plain float space, then re-attach the unit.
+            rate_unit = rates[0].units
+            # Broadcast scalar magnitudes to shape (n,) so np.array stacks cleanly.
+            rate_mags = np.array([np.broadcast_to(r.to(rate_unit).magnitude, (n,)) for r in rates])  # (n_reactions, n)
+            drift_mags = self._stoichiometry_t @ rate_mags  # (n_species, n)
+            # Multiply plain arrays by the unit object from the same registry so
+            # the resulting Quantities are registry-compatible with self.dt.
+            drift: list[Quantity] = [drift_mags[i] * rate_unit for i in range(n_species)]
             noise_increment: list[Quantity] = noise_fun(rng, t, states_batch)
             state_new: list[Quantity] = cast(
                 "list[Quantity]",
